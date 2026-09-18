@@ -4,14 +4,23 @@ import shutil
 import zipfile
 import uuid
 from typing import List, Dict, Any, Optional
-from app.config import PROJECTS_DIR, BASE_DIR
+from app.config import PROJECTS_DIR, BASE_DIR, MIGRATION_TARGETS, SUPPORTED_LANGUAGES
 from app.storage.db import (
     save_project, list_projects, get_project, get_agent_events, record_agent_event
 )
 from app.mcp.tools.analysis import build_dependency_graph, analyze_repository
+from app.parser.universal_parser import detect_language_and_framework
 from app.api.ws import ws_manager
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+@router.get("/targets")
+def get_migration_targets():
+    """Returns supported source languages and target frameworks for migration."""
+    return {
+        "source_languages": SUPPORTED_LANGUAGES,
+        "target_frameworks": MIGRATION_TARGETS
+    }
 
 @router.get("")
 def get_all_projects():
@@ -81,11 +90,55 @@ async def load_sample_project(background_tasks: BackgroundTasks):
         "message": "Sample project ingested successfully."
     }
 
+@router.post("/sample-python")
+async def load_python_sample_project(background_tasks: BackgroundTasks):
+    """
+    Loads the bundled Python Flask Task API sample repository into a new active project.
+    Allows 1-click testing of Python -> Spring Boot or Python -> Go/FastAPI migrations.
+    """
+    sample_source = BASE_DIR / "samples" / "python-taskapi"
+    if not sample_source.exists():
+        raise HTTPException(status_code=404, detail="Bundled Python sample project not found on server.")
+
+    project_id = f"proj-{uuid.uuid4().hex[:8]}"
+    project_dest = PROJECTS_DIR / project_id
+    shutil.copytree(sample_source, project_dest)
+
+    save_project(
+        project_id=project_id,
+        name="Python Task API (Flask)",
+        source_framework="Python / Flask",
+        target_framework="Spring Boot / Java",
+        source_path=str(project_dest),
+        status="INITIALIZED"
+    )
+
+    record_agent_event(
+        project_id=project_id,
+        category="EVIDENCE",
+        agent_name="ArchaeologistAgent",
+        title="Python Flask Project Ingested",
+        details="Loaded Python Task API repository with SQLAlchemy Task model and Flask CRUD blueprint.",
+        metadata={"project_id": project_id, "language": "python", "framework": "flask"}
+    )
+
+    background_tasks.add_task(analyze_repository, project_id)
+    background_tasks.add_task(build_dependency_graph, project_id)
+
+    return {
+        "success": True,
+        "project_id": project_id,
+        "name": "Python Task API (Flask)",
+        "source_framework": "Python / Flask",
+        "message": "Python sample project ingested successfully."
+    }
+
 @router.post("/upload")
 async def upload_project_zip(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    name: str = Form("Uploaded Project")
+    name: str = Form("Uploaded Project"),
+    target_framework: str = Form("spring_boot")
 ):
     if not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are supported.")
@@ -107,11 +160,15 @@ async def upload_project_zip(
         shutil.rmtree(project_dest, ignore_errors=True)
         raise HTTPException(status_code=400, detail=f"Failed to unzip archive: {str(e)}")
 
+    # Auto-detect language and framework!
+    lang, fw = detect_language_and_framework(project_dest)
+    detected_source = f"{lang.title()} / {fw.title()}"
+
     save_project(
         project_id=project_id,
         name=name,
-        source_framework="Node.js / Express",
-        target_framework="Spring Boot / Java",
+        source_framework=detected_source,
+        target_framework=target_framework,
         source_path=str(project_dest),
         status="INITIALIZED"
     )
@@ -121,8 +178,8 @@ async def upload_project_zip(
         category="EVIDENCE",
         agent_name="ArchaeologistAgent",
         title=f"Archive Ingested: {file.filename}",
-        details=f"Unpacked repository archive to project space {project_id}",
-        metadata={"filename": file.filename}
+        details=f"Detected architecture: {detected_source}. Target configured for {target_framework}.",
+        metadata={"filename": file.filename, "detected_language": lang, "detected_framework": fw}
     )
 
     background_tasks.add_task(analyze_repository, project_id)
@@ -132,5 +189,8 @@ async def upload_project_zip(
         "success": True,
         "project_id": project_id,
         "name": name,
-        "message": "Archive uploaded and unpacked successfully."
+        "source_framework": detected_source,
+        "target_framework": target_framework,
+        "message": f"Archive uploaded. Auto-detected {detected_source}."
     }
+

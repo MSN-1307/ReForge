@@ -24,3 +24,21 @@ class Settings(BaseModel):
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
 
 settings = Settings()
+
+SUPPORTED_LANGUAGES = [
+    {"id": "javascript", "name": "JavaScript", "frameworks": ["Express.js", "Koa"], "icon": "js"},
+    {"id": "typescript", "name": "TypeScript", "frameworks": ["NestJS", "Express"], "icon": "ts"},
+    {"id": "python", "name": "Python", "frameworks": ["FastAPI", "Flask", "Django REST"], "icon": "python"},
+    {"id": "java", "name": "Java", "frameworks": ["Spring Boot 3", "Jakarta EE"], "icon": "java"},
+    {"id": "go", "name": "Go", "frameworks": ["Gin", "Echo"], "icon": "go"},
+    {"id": "php", "name": "PHP", "frameworks": ["Laravel", "Symfony"], "icon": "php"},
+    {"id": "ruby", "name": "Ruby", "frameworks": ["Rails", "Sinatra"], "icon": "ruby"},
+]
+
+MIGRATION_TARGETS = [
+    {"id": "spring_boot", "name": "Java Spring Boot 3", "language": "Java", "badge": "Enterprise Ready", "desc": "Full MVC with JPA Entities, Repositories, and Maven build"},
+    {"id": "fastapi", "name": "Python FastAPI", "language": "Python", "badge": "High Performance", "desc": "Async routes, Pydantic v2 validation, SQLAlchemy ORM"},
+    {"id": "flask", "name": "Python Flask", "language": "Python", "badge": "Lightweight", "desc": "Blueprints, SQLAlchemy models, Flask-CORS"},
+    {"id": "gin", "name": "Go Gin", "language": "Go", "badge": "Ultra Fast", "desc": "High-throughput compiled binary with GORM"},
+    {"id": "express", "name": "Node.js Express", "language": "JavaScript", "badge": "Universal JS", "desc": "Clean Express 4 REST routing and CORS middleware"},
+]

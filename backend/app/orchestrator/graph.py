@@ -2,8 +2,11 @@ from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 from app.orchestrator.state import ReForgeState
 from app.mcp.registry import mcp_registry
-from app.storage.db import update_project_status, record_agent_event, get_project
+from pathlib import Path
+from app.storage.db import update_project_status, record_agent_event, get_project, save_project
 from app.mapping.express_to_spring import mapping_engine
+from app.parser.universal_parser import universal_parser
+from app.mapping.universal_mapper import universal_mapper
 
 def archaeologist_node(state: ReForgeState) -> Dict[str, Any]:
     project_id = state["project_id"]
@@ -57,51 +60,31 @@ def migration_node(state: ReForgeState) -> Dict[str, Any]:
     project = get_project(project_id)
     update_project_status(project_id, status="MIGRATION_RUNNING")
 
-    plan = state.get("migration_plan", {})
+    source_path = Path(project["source_path"])
+    target_framework = project.get("target_framework", "Spring Boot")
+    upgrades = state.get("modernization_options", [])
+
+    # Parse project through universal parser
+    u_proj = universal_parser.parse_project(source_path, project["name"])
+    target_key, generated_files_list = universal_mapper.generate_project(
+        u_proj,
+        target_framework=target_framework,
+        upgrades=upgrades
+    )
+
     generated_files = []
-
-    # 1. Generate Entities and Repositories
-    for entity in plan.get("entities", []):
-        entity_path, entity_code = mapping_engine.map_model_to_jpa_entity(entity)
-        mcp_registry.execute("generate_file", project_id=project_id, file_path=entity_path, content=entity_code)
-        generated_files.append({"path": entity_path, "type": "Entity", "content": entity_code})
-
-        repo_path, repo_code = mapping_engine.map_repository(entity.get("name"))
-        mcp_registry.execute("generate_file", project_id=project_id, file_path=repo_path, content=repo_code)
-        generated_files.append({"path": repo_path, "type": "Repository", "content": repo_code})
-
-    # 2. Generate Controllers
-    for ctrl in plan.get("controllers", []):
-        ctrl_name = ctrl.get("name", "Main")
-        base_path = ctrl.get("base_path", "/api")
-        routes = ctrl.get("routes", [])
-        # Determine model
-        model_name = plan.get("entities", [{}])[0].get("name", "Item") if plan.get("entities") else "Item"
-        
-        ctrl_path, ctrl_code = mapping_engine.map_routes_to_controller(ctrl_name, base_path, routes, model_name=model_name)
-        mcp_registry.execute("generate_file", project_id=project_id, file_path=ctrl_path, content=ctrl_code)
-        generated_files.append({"path": ctrl_path, "type": "Controller", "content": ctrl_code})
-
-    # 3. Generate Infrastructure (Application.java, pom.xml, application.properties)
-    app_path, app_code = mapping_engine.generate_main_application()
-    mcp_registry.execute("generate_file", project_id=project_id, file_path=app_path, content=app_code)
-    generated_files.append({"path": app_path, "type": "Application", "content": app_code})
-
-    props_path, props_code = mapping_engine.generate_application_properties()
-    mcp_registry.execute("generate_file", project_id=project_id, file_path=props_path, content=props_code)
-    generated_files.append({"path": props_path, "type": "Properties", "content": props_code})
-
-    pom_path, pom_code = mapping_engine.generate_pom_xml(project["name"], upgrades=state.get("modernization_options", []))
-    mcp_registry.execute("generate_file", project_id=project_id, file_path=pom_path, content=pom_code)
-    generated_files.append({"path": pom_path, "type": "POM", "content": pom_code})
+    for rel_path, content in generated_files_list:
+        mcp_registry.execute("generate_file", project_id=project_id, file_path=rel_path, content=content)
+        generated_files.append({"path": rel_path, "type": Path(rel_path).suffix, "content": content})
 
     # Validate build
-    build_res = mcp_registry.execute("build_project", project_id=project_id, framework="Spring Boot")
+    build_res = mcp_registry.execute("build_project", project_id=project_id, framework=target_key)
 
     return {
         "status": "MIGRATION_COMPLETE",
         "generated_files": generated_files
     }
+
 
 def verification_node(state: ReForgeState) -> Dict[str, Any]:
     project_id = state["project_id"]

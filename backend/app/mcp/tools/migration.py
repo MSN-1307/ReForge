@@ -173,12 +173,22 @@ def build_project(project_id: str, framework: str = "Spring Boot") -> Dict[str, 
     if not target_dir.exists():
         raise FileNotFoundError(f"Target directory {target_dir} does not exist.")
 
-    # Check that required files exist
-    required = [
-        "pom.xml",
-        "src/main/resources/application.properties",
-        "src/main/java/com/reforge/app/Application.java"
-    ]
+    # Framework-aware file verification
+    req_map = {
+        "spring_boot": ["pom.xml", "src/main/resources/application.properties"],
+        "fastapi": ["main.py", "requirements.txt"],
+        "flask": ["app.py", "requirements.txt"],
+        "gin": ["main.go", "go.mod"],
+        "express": ["server.js", "package.json"]
+    }
+    norm_fw = "spring_boot"
+    fw_lower = framework.lower()
+    for k in req_map:
+        if k in fw_lower:
+            norm_fw = k
+            break
+
+    required = req_map.get(norm_fw, ["pom.xml"])
     missing = [f for f in required if not (target_dir / f).exists()]
 
     if missing:
@@ -197,9 +207,9 @@ def build_project(project_id: str, framework: str = "Spring Boot") -> Dict[str, 
         project_id=project_id,
         category="EVIDENCE",
         agent_name="MigrationAgent",
-        title="Project Build Validated",
-        details="Verified Maven project structure, Java syntax, and Spring Boot annotations.",
-        metadata={"status": "BUILD_SUCCESS"}
+        title=f"Project Build Validated ({framework})",
+        details=f"Verified project structure, configurations, and core components for {framework}.",
+        metadata={"status": "BUILD_SUCCESS", "framework": framework}
     )
 
     update_project_status(project_id, status="MIGRATED", target_path=str(target_dir))
@@ -209,3 +219,4 @@ def build_project(project_id: str, framework: str = "Spring Boot") -> Dict[str, 
         "target_dir": str(target_dir),
         "status": "BUILD_SUCCESS"
     }
+

@@ -29,10 +29,21 @@ export const api = {
     return res.json();
   },
 
-  uploadZip: async (file, name) => {
+  loadPythonSampleProject: async () => {
+    const res = await fetch(`${API_BASE}/projects/sample-python`, { method: 'POST' });
+    return res.json();
+  },
+
+  getTargets: async () => {
+    const res = await fetch(`${API_BASE}/projects/targets`);
+    return res.json();
+  },
+
+  uploadZip: async (file, name, targetFramework = 'spring_boot') => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('name', name);
+    formData.append('target_framework', targetFramework);
     const res = await fetch(`${API_BASE}/projects/upload`, {
       method: 'POST',
       body: formData,
@@ -66,11 +77,11 @@ export const api = {
     return res.json();
   },
 
-  executeMigration: async (projectId, upgrades = ['docker', 'openapi', 'redis']) => {
+  executeMigration: async (projectId, targetFramework = 'spring_boot', upgrades = ['docker', 'openapi', 'redis']) => {
     const res = await fetch(`${API_BASE}/migration/${projectId}/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ modernization_upgrades: upgrades }),
+      body: JSON.stringify({ target_framework: targetFramework, modernization_upgrades: upgrades }),
     });
     return res.json();
   },

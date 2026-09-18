@@ -1,0 +1,28 @@
+body {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  background: #020617;
+}
+
+#root {
+  min-width: 420px;
+  min-height: 100vh;
+  background: linear-gradient(
+    180deg,
+    #020617 0%,
+    #0f172a 100%
+  );
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
